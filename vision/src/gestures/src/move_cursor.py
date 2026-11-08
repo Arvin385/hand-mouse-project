@@ -152,23 +152,22 @@ class Gesture:
             self.previous_y
         )
 
-        self.previous_x = (
-            self.filtered_x
-        )
-
-        self.previous_y = (
-            self.filtered_y
-        )
 
         # ---------------------------------------------
         # Deadzone
         # ---------------------------------------------
 
+        # Keep each baseline until accumulated motion crosses
+        # its deadzone, so slow movement is not discarded.
         if abs(dx) < self.DEADZONE:
             dx = 0
+        else:
+            self.previous_x = self.filtered_x
 
         if abs(dy) < self.DEADZONE:
             dy = 0
+        else:
+            self.previous_y = self.filtered_y
 
         # ---------------------------------------------
         # Convert normalized movement → cursor movement

@@ -52,11 +52,12 @@ class Gesture:
             return False
 
         # ---------------------------------------------
-        # OPEN PALM arms left-down
+        # Unpinched OPEN PALM arms left-down
         # ---------------------------------------------
 
-        if states.is_active(
-            "open_palm"
+        if (
+            states.is_active("open_palm")
+            and not states.is_active("index_pinch")
         ):
 
             self.armed = True
@@ -89,7 +90,7 @@ class Gesture:
             return False
 
         # ---------------------------------------------
-        # INDEX ONLY
+        # INDEX PINCH
         # ---------------------------------------------
 
         if states.is_active(
@@ -103,7 +104,7 @@ class Gesture:
             self.index_frames = 0
 
         # ---------------------------------------------
-        # Stable INDEX ONLY reached
+        # Stable INDEX PINCH reached
         # ---------------------------------------------
 
         if (

@@ -1,43 +1,66 @@
-from pynput.mouse import Button, Controller
+"""
+Shared mouse facade used internally by gestures.
+
+``engine.py`` does not interact with this object. Gesture code calls only the
+methods defined here (``move`` / ``left_down`` / ``left_up`` /
+``is_left_down`` / ``double_click`` / ``release_all``) -- the *same* public
+API as before this refactor, so the gesture-recognition files are unchanged.
+
+Under the hood this facade delegates to a single OS :class:`MouseBackend`
+selected once at startup (see the top-level :mod:`mouse` package):
+
+    * pynput  -- Jetson / X11 (original behaviour, preserved)
+    * uinput  -- Wayland fallback (evdev)
+    * libei   -- Wayland primary (KDE RemoteDesktop portal)
+
+The backend is constructed eagerly so a misconfiguration fails fast with a
+clear, actionable message rather than silently doing nothing.
+"""
+
+from mouse import Button, create_mouse_backend
 
 
 class Mouse:
     """
     Shared mouse interface used internally by gestures.
 
-    engine.py does not interact with this object.
+    A thin, stable facade over the selected :class:`MouseBackend`. The public
+    method set is intentionally unchanged from the original implementation so
+    that no gesture file needs to change when the backend does.
     """
 
     def __init__(self):
-        self._controller = Controller()
+        # Explicit selection is available via the HANDMOUSE_MOUSE_BACKEND
+        # environment variable (pynput | uinput | libei); the factory handles
+        # it plus automatic session-based detection.
+        self._backend = create_mouse_backend()
 
-        self._left_down = False
+        # Backend state is authoritative across pause, disconnect and close.
+
+    # ========================================================
+    # BACKEND ACCESS
+    # ========================================================
+
+    @property
+    def backend(self):
+        return self._backend
+
+    @property
+    def backend_name(self):
+        return self._backend.name
 
     # ========================================================
     # MOVEMENT
     # ========================================================
 
-    def move(
-        self,
-        dx,
-        dy
-    ):
-        dx = int(
-            round(dx)
-        )
+    def move(self, dx, dy):
+        """
+        Move the cursor by a relative amount (logical pixels).
 
-        dy = int(
-            round(dy)
-        )
+        Safe to call with (0, 0) -- it is a no-op.
+        """
 
-        if (
-            dx == 0
-            and
-            dy == 0
-        ):
-            return
-
-        self._controller.move(
+        self._backend.move_relative(
             dx,
             dy
         )
@@ -53,14 +76,12 @@ class Mouse:
         Safe to call repeatedly.
         """
 
-        if self._left_down:
+        if self.is_left_down():
             return
 
-        self._controller.press(
-            Button.left
+        self._backend.button_down(
+            Button.LEFT
         )
-
-        self._left_down = True
 
     def left_up(self):
         """
@@ -69,17 +90,15 @@ class Mouse:
         Safe to call repeatedly.
         """
 
-        if not self._left_down:
+        if not self.is_left_down():
             return
 
-        self._controller.release(
-            Button.left
+        self._backend.button_up(
+            Button.LEFT
         )
 
-        self._left_down = False
-
     def is_left_down(self):
-        return self._left_down
+        return self._backend.is_button_down(Button.LEFT)
 
     # ========================================================
     # DOUBLE CLICK
@@ -90,20 +109,38 @@ class Mouse:
         Execute a left-button double click.
         """
 
-        if self._left_down:
+        if self.is_left_down():
             return
 
-        self._controller.click(
-            Button.left,
+        self._backend.click(
+            Button.LEFT,
             2
         )
 
     # ========================================================
-    # SAFETY
+    # SAFETY / LIFECYCLE
     # ========================================================
 
     def release_all(self):
-        self.left_up()
+        self._backend.release_all()
+
+    def close(self):
+        """
+        Release backend resources and any held buttons.
+
+        Idempotent. Safe to call from shutdown paths. Never leaves the left
+        button logically held.
+        """
+
+        try:
+            self.release_all()
+        except Exception:
+            pass
+
+        try:
+            self._backend.close()
+        except Exception:
+            pass
 
 
 # Shared by every gesture.

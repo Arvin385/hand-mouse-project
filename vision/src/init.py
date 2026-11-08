@@ -1,6 +1,7 @@
 import cv2
 import mediapipe as mp
 import os
+from pathlib import Path
 import subprocess
 import time
 
@@ -17,7 +18,7 @@ from camera.config import (
 # CONFIGURATION
 # ============================================================
 
-MODEL_PATH = "hand_landmarker.task"
+MODEL_PATH = str(Path(__file__).resolve().with_name("hand_landmarker.task"))
 
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480

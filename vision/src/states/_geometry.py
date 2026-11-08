@@ -247,7 +247,8 @@ def pinch_ratio(
     )
 
     if hand_width < 1e-6:
-        return 0.0
+        # A collapsed reference width cannot establish a pinch.
+        return math.inf
 
     return distance(
         landmarks[4],

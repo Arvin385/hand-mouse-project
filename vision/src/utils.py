@@ -1,6 +1,13 @@
 import cv2
 import time
 
+from camera import exposure_controller
+from camera.exposure import ExposureController
+from camera.config import (
+    CAMERA_EXPOSURE_HARD_MAX,
+    CAMERA_GAIN_HARD_MAX,
+)
+
 
 class EngineUtils:
     """
@@ -10,11 +17,110 @@ class EngineUtils:
     and other support functions out of the main engine.
     """
 
+    WINDOW = "Jetson Hand Mouse"
+
     def __init__(
         self,
         engine
     ):
         self.engine = engine
+
+        # Live settings UI state.
+        self._ui_ready = False
+
+    # ========================================================
+    # LIVE SETTINGS UI (trackbars on the debug window)
+    # ========================================================
+
+    def _init_ui(self):
+        """
+        Create live-adjustable sliders for camera tuning.
+
+        OpenCV highgui has no editable text field, so numeric
+        trackbars are used; they update the camera the moment
+        you move them.
+
+        Mode trackbar maps to ExposureController.MODES:
+            0 manual    - sliders drive exposure/gain directly
+            1 software  - controller auto-brightens (Jetson-safe)
+            2 native    - camera native auto exposure (laptop)
+        """
+        status = exposure_controller.status()
+
+        cv2.createTrackbar(
+            "Mode",
+            self.WINDOW,
+            exposure_controller.mode_index,
+            len(ExposureController.MODES) - 1,
+            lambda value: None,
+        )
+
+        cv2.createTrackbar(
+            "Exposure",
+            self.WINDOW,
+            int(status["exposure"]),
+            CAMERA_EXPOSURE_HARD_MAX,
+            lambda value: None,
+        )
+
+        cv2.createTrackbar(
+            "Gain",
+            self.WINDOW,
+            int(status["gain"]),
+            CAMERA_GAIN_HARD_MAX,
+            lambda value: None,
+        )
+
+        cv2.createTrackbar(
+            "Target",
+            self.WINDOW,
+            int(status["target"]),
+            255,
+            lambda value: None,
+        )
+
+        self._ui_ready = True
+
+    def _apply_ui(self):
+        """
+        Read slider positions and push them to the controller.
+
+        The controller only issues v4l2-ctl writes when a value
+        actually changes, so calling this every frame is cheap.
+        """
+        mode_index = cv2.getTrackbarPos("Mode", self.WINDOW)
+        mode_index = max(
+            0,
+            min(len(ExposureController.MODES) - 1, mode_index),
+        )
+
+        mode = ExposureController.MODES[mode_index]
+        previous_mode = exposure_controller.mode
+        was_pending = exposure_controller.pending_mode is not None
+        if not exposure_controller.set_mode(mode):
+            # Leave the requested trackbar selection intact for next-frame retry.
+            return
+
+        if mode == ExposureController.MODE_MANUAL and (
+            previous_mode != mode or was_pending
+        ):
+            # Software may have evolved the cache while sliders were inactive.
+            # Enter manual with current values, not stale slider positions.
+            status = exposure_controller.status()
+            cv2.setTrackbarPos("Exposure", self.WINDOW, int(status["exposure"]))
+            cv2.setTrackbarPos("Gain", self.WINDOW, int(status["gain"]))
+
+        if mode == ExposureController.MODE_MANUAL:
+            exposure = cv2.getTrackbarPos("Exposure", self.WINDOW)
+            gain = cv2.getTrackbarPos("Gain", self.WINDOW)
+            exposure_controller.set_manual(exposure, gain)
+
+        elif mode == ExposureController.MODE_SOFTWARE:
+            exposure_controller.set_target_brightness(
+                cv2.getTrackbarPos("Target", self.WINDOW)
+            )
+
+        # native mode: the camera owns exposure; sliders ignored.
 
     # ========================================================
     # INFERENCE STATISTICS
@@ -195,6 +301,32 @@ class EngineUtils:
             )
 
         # ----------------------------------------------------
+        # Current camera settings (live)
+        # ----------------------------------------------------
+
+        status = exposure_controller.status()
+
+        brightness = status["brightness"]
+        brightness_text = (
+            "n/a" if brightness is None else f"{brightness:.0f}"
+        )
+
+        cv2.putText(
+            frame,
+            (
+                f"Cam: {status['mode']} pending={status['pending_mode']} "
+                f"exp={status['exposure']} "
+                f"gain={status['gain']} "
+                f"bri={brightness_text}"
+            ),
+            (10, 150),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.50,
+            (0, 255, 0),
+            1
+        )
+
+        # ----------------------------------------------------
         # Display
         # ----------------------------------------------------
 
@@ -202,6 +334,16 @@ class EngineUtils:
             "Jetson Hand Mouse",
             frame
         )
+
+        # Trackbars need an existing window, so create them
+        # after the first imshow, then keep them authoritative.
+        try:
+            if not self._ui_ready:
+                self._init_ui()
+            self._apply_ui()
+        except Exception as exc:
+            print(f"Camera settings UI unavailable: {exc}")
+            self._ui_ready = False
 
         key = (
             cv2.waitKey(1)

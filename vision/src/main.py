@@ -1,8 +1,16 @@
+import signal
+
 from init import initialize
 from engine import Engine
+from gestures._mouse import mouse
+
+
+def _stop(signum, frame):
+    raise KeyboardInterrupt
 
 
 def main():
+    signal.signal(signal.SIGTERM, _stop)
     app = None
 
     try:
@@ -39,6 +47,16 @@ def main():
         raise
 
     finally:
+        # --------------------------------------------
+        # Release the mouse backend (never leave a button held)
+        # --------------------------------------------
+
+        try:
+            mouse.close()
+        except Exception as exc:
+            print()
+            print(f"Mouse backend cleanup warning: {exc}")
+
         # --------------------------------------------
         # init.py owns camera + MediaPipe resources
         # --------------------------------------------
