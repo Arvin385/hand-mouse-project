@@ -1,0 +1,25 @@
+# Hand Mouse Project — Python dependencies
+#
+# NOTE on the interpreter: MediaPipe ships prebuilt wheels only for a limited
+# CPython range (roughly 3.9–3.12). Manjaro's system Python is currently 3.14,
+# which MediaPipe does NOT support. Create the venv from a compatible
+# interpreter, e.g. python3.11:
+#
+#     python3.11 -m venv .venv
+#     source .venv/bin/activate
+#     pip install -r requirements.txt
+#
+# The `voice/` package needs nothing here beyond the stdlib: its STT backend is
+# a compiled C++ `voice_service` binary built from `third_party/whisper.cpp`
+# (see voice/src/stt/CMakeLists.txt), and its LLM client uses stdlib urllib.
+
+# ---- Vision (hand tracking + gesture mouse) ----
+mediapipe            # Hand Landmarker (Tasks API); also pulls cv2 via opencv-contrib-python
+numpy                # camera/exposure brightness math + landmark arrays
+pynput               # mouse backend for X11 / Jetson
+evdev                # mouse backend for Wayland/uinput (python-evdev on pacman)
+
+# ---- Optional / system-provided (NOT pip) ----
+# libei backend loads the system lib via ctypes:  sudo pacman -S libei
+# Wayland portal path:                            sudo pacman -S xdg-desktop-portal xdg-desktop-portal-kde
+# See vision/WAYLAND-SETUP.md for the one-time setup.

@@ -36,8 +36,9 @@ class Gesture:
         # OPEN PALM
         # ---------------------------------------------
 
-        if states.is_active(
-            "open_palm"
+        if (
+            states.is_active("open_palm")
+            and not states.is_active("index_pinch")
         ):
 
             self.open_frames += 1

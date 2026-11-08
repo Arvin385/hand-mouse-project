@@ -1,2 +1,10 @@
 .cptr
 .venv/
+.run/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+AGENT.md
+AGENTS.md
+.agents/
+/plans/

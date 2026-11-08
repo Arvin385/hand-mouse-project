@@ -65,6 +65,17 @@ class Gesture:
 
             return False
 
+        # Holding the initial palm keeps the sequence armed.
+        if (
+            self.stage == "WAIT_TWO"
+            and states.is_active("open_palm")
+        ):
+
+            self.stage_time = now
+            self.two_finger_frames = 0
+
+            return False
+
         # ---------------------------------------------
         # Sequence timeout
         # ---------------------------------------------
